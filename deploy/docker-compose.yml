@@ -1,0 +1,240 @@
+services:
+  gateway-api:
+    build:
+      context: ..
+      dockerfile: src/Gateway/Gateway.Api/Dockerfile
+    container_name: gateway-api
+    volumes:
+      - prometheus_targets:/app/prometheus_targets
+    ports:
+      - "${GATEWAY_PORT:-8000}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - SEQ_URL=${SEQ_URL}
+    networks:
+      - monitor-net
+    depends_on:
+      seq:
+        condition: service_started
+      stock-api:
+        condition: service_healthy
+      order-api:
+        condition: service_healthy
+      identity-api:
+        condition: service_healthy
+
+  stock-api:
+    build:
+      context: ..
+      dockerfile: src/Services/StockService/Stock.Api/Dockerfile
+    container_name: stock-api
+    ports:
+      - "${STOCK_API_PORT:-8080}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - ConnectionStrings__DefaultConnection=${CONN_STR_STOCK}
+      - RabbitMq__Host=${RABBITMQ_HOST}
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - SEQ_URL=${SEQ_URL}
+    networks:
+      - monitor-net
+    depends_on:
+      seq:
+        condition: service_started
+      sql-stock:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  order-api:
+    build:
+      context: ..
+      dockerfile: src/Services/OrderService/Order.Api/Dockerfile
+    container_name: order-api
+    ports:
+      - "${ORDER_API_PORT:-8082}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - ConnectionStrings__DefaultConnection=${CONN_STR_ORDER}
+      - RabbitMq__Host=${RABBITMQ_HOST}
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - SEQ_URL=${SEQ_URL}
+    networks:
+      - monitor-net
+    depends_on:
+      seq:
+        condition: service_started
+      sql-orders:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      identity-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  identity-api:
+    build:
+      context: ..
+      dockerfile: src/Services/IdentityService/Identity.Api/Dockerfile
+    container_name: identity-api
+    ports:
+      - "${IDENTITY_API_PORT:-8084}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT}
+      - ConnectionStrings__DefaultConnection=${CONN_STR_IDENTITY}
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - SEQ_URL=${SEQ_URL}
+    networks:
+      - monitor-net
+    depends_on:
+      seq:
+        condition: service_started
+      identity-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  identity-db:
+    image: mysql:8.0
+    container_name: identity-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_IDENTITY_DATABASE}
+      MYSQL_USER: ${DB_IDENTITY_USER}
+      MYSQL_PASSWORD: ${DB_IDENTITY_PASSWORD}
+    ports:
+      - "${IDENTITY_DB_PORT:-1403}:3306"
+    volumes:
+      - identity-db-data:/var/lib/mysql
+    networks:
+      - monitor-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  sql-orders:
+    image: mysql:8.0
+    container_name: sql-orders
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_ORDERS_DATABASE}
+      MYSQL_USER: ${DB_ORDERS_USER}
+      MYSQL_PASSWORD: ${DB_ORDERS_PASSWORD}
+    ports:
+      - "${ORDER_DB_PORT:-1401}:3306"
+    volumes:
+      - sql-orders-data:/var/lib/mysql
+    networks:
+      - monitor-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+  sql-stock:
+    image: mysql:8.0
+    container_name: sql-stock
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_STOCK_DATABASE}
+      MYSQL_USER: ${DB_STOCK_USER}
+      MYSQL_PASSWORD: ${DB_STOCK_PASSWORD}
+    ports:
+      - "${STOCK_DB_PORT:-1402}:3306"
+    volumes:
+      - sql-stock-data:/var/lib/mysql
+    networks:
+      - monitor-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+      
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_UI_PORT:-15672}:15672"
+    networks:
+      - monitor-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_targets:/etc/prometheus-targets
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - monitor-net
+    depends_on:
+      - gateway-api
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks:
+      - monitor-net
+    depends_on:
+      - prometheus
+
+  seq:
+    image: datalust/seq:latest
+    container_name: seq
+    environment:
+      - ACCEPT_EULA=Y
+      - SEQ_FIRSTRUN_ADMINPASSWORD=${SEQ_ADMIN_PASSWORD}
+    ports:
+      - "${SEQ_PORT:-5341}:80"
+    networks:
+      - monitor-net
+    volumes:
+      - seq_data:/data
+
+networks:
+  monitor-net:
+    driver: bridge
+
+volumes:
+  prometheus_targets:
+  grafana_data:
+  seq_data:
+  sql-orders-data:
+  sql-stock-data:
+  identity-db-data:
