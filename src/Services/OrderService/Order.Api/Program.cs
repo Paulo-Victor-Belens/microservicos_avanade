@@ -23,7 +23,6 @@ var builder = WebApplication.CreateBuilder(args);
 var workerId = 0;
 var MyAllowSpecificOrigins = "_myAllowSpecificOrigins";
 
-// Configura a porta do container
 builder.WebHost.UseUrls("http://+:8080");
 
 builder.Host.UseSerilog((context, services, configuration) => configuration
@@ -90,18 +89,15 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddSingleton(new IdGenerator(workerId));
 builder.Services.AddHealthChecks();
 
-// Adiciona suporte a Controllers e configura o serializador JSON
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
     });
 
-// registra FluentValidation
 builder.Services.AddFluentValidationAutoValidation();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
 
-// Configura o banco de dados
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<OrderDbContext>(options =>
     options.UseMySql(connectionString,  new MySqlServerVersion(new Version(8, 0, 0)),
@@ -115,35 +111,26 @@ builder.Services.AddDbContext<OrderDbContext>(options =>
     .UseSnakeCaseNamingConvention()
 );
 
-// Registra os serviços e repositórios para injeção de dependência
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<OrderService>();
 
-// ****** INÍCIO DA CORREÇÃO ******
-// Bloco único para configurar o MassTransit e todos os seus consumidores
 builder.Services.AddMassTransit(x =>
 {
-    // Registra o consumidor que vai ouvir as confirmações de estoque
     x.AddConsumer<StockUpdatedConsumer>();
 
     x.UsingRabbitMq((context, cfg) =>
     {
-        // Usa "rabbitmq" como host, que é o nome do serviço no docker-compose
         cfg.Host("rabbitmq", "/", h => {
             h.Username("guest");
             h.Password("guest");
         });
 
-        // Configura os endpoints para os consumidores registrados
         cfg.ConfigureEndpoints(context);
     });
 });
-// ****** FIM DA CORREÇÃO ******
 
-// Adiciona o IHttpClientFactory ao container de injeção de dependência
 builder.Services.AddHttpClient();
 
-// Configura o Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -173,7 +160,6 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// Configura o pipeline de requisições HTTP
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -188,7 +174,6 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health").AllowAnonymous();
 
-// Adiciona os middlewares do Prometheus
 app.MapMetrics();
 
 app.Run();

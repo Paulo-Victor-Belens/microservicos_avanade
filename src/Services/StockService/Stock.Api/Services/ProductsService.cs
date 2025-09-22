@@ -14,7 +14,7 @@ namespace Stock.Api.Services
         public ProductService(IProductRepository productRepository, IdGenerator idGenerator)
         {
             _productRepository = productRepository;
-            _idGenerator = idGenerator; // <-- Adicionado
+            _idGenerator = idGenerator;
         }
 
         public async Task<Product> CreateProductAsync(CreateProductRequestDto request)

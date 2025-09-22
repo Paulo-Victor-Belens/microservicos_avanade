@@ -26,7 +26,6 @@ builder.Host.UseSerilog((context, services, configuration) => configuration
     .ReadFrom.Services(services)
     .WriteTo.Console());
 
-// --- AJUSTE A POLÍTICA DE CORS AQUI ---
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: MyAllowSpecificOrigins,
@@ -111,8 +110,6 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
-// --- CONFIGURAÇÃO DO PIPELINE ---
-
 app.UseCors(MyAllowSpecificOrigins);
 
 if (app.Environment.IsDevelopment())
@@ -120,8 +117,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
-// app.UseHttpsRedirection();
 
 app.UseHttpMetrics();
 app.UseIdentityServer();

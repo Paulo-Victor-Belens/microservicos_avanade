@@ -174,8 +174,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpMetrics();
 
-// app.UseHttpsRedirection();
-
 app.UseAuthentication();
 app.UseAuthorization();
 
