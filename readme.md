@@ -103,8 +103,8 @@ O sistema é composto por um conjunto de serviços orquestrados via Docker Compo
 
 1.  **Clone o repositório:**
     ```bash
-    git clone <url-do-seu-repositorio>
-    cd <pasta-do-projeto>
+    git clone https://github.com/Paulo-Victor-Belens/microservicos_avanade.git
+    cd deploy
     ```
 
 2.  **Crie o arquivo de ambiente:**
